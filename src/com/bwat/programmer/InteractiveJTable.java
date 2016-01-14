@@ -77,6 +77,7 @@ public class InteractiveJTable extends JPanel {
 	private JButton saveAs = new JButton( "Save As..." );
 	private JButton load = new JButton( "Load Table" );
 	private JButton send = new JButton( "Send" );
+	private JButton download = new JButton( "Download" );
 	private final static String EXTENSION = ".jtb";
 	private final static String PROGRAM_EXTENSION = ".prg";
 	private final static String COMMA = ",";
@@ -94,7 +95,7 @@ public class InteractiveJTable extends JPanel {
 	private final static String FTP_PASS = "bwat1234";
 	private final static String FTP_REMOTE_DIR = "/hmi/prg/";
 	
-	private void sendFile( final String host ) {
+	private void runSFTPCommand(final String host, final SFTPAction action, final String progressMsg, final String success) {
 		if ( host != null & NetUtils.isValidIPAddress( host ) ) {
 			// Display a loading dialog
 			final JDialog sending = new JDialog();
@@ -104,7 +105,7 @@ public class InteractiveJTable extends JPanel {
 			JProgressBar progress = new JProgressBar();
 			progress.setIndeterminate( true );
 			
-			sending.add( SwingUtils.createGridJPanel( 2, 1, new JLabel( "Sending..." ), progress ) );
+			sending.add( SwingUtils.createGridJPanel( 2, 1, new JLabel( progressMsg ), progress ) );
 			sending.pack();
 			sending.setLocationRelativeTo( null );
 			
@@ -122,28 +123,16 @@ public class InteractiveJTable extends JPanel {
 						ssh.connect( host, FTP_PORT );
 						ssh.authPassword( FTP_USER, FTP_PASS );
 						SFTPClient sftp = ssh.newSFTPClient();
-						// Session cmd = ssh.startSession();
 						
-						File jtb = new File( getTablePath() ), prg = new File( getProgramPath( (int) indexSelector.getValue() ) ), prm = new File( getParamPath() );
-						// Send the JTB file
-						String remote = FTP_REMOTE_DIR + jtb.getName();
-						sftp.put( jtb.getPath(), remote );
+						//Run the SFTP action
+						action.run( sftp );
 						
-						// Send the PRG file
-						remote = FTP_REMOTE_DIR + prg.getName();
-						sftp.put( prg.getPath(), remote );
-						
-						// Send the PRM file
-						remote = FTP_REMOTE_DIR + prm.getName();
-						sftp.put( prm.getPath(), remote );
-						
-						// cmd.close();
 						sftp.close();
 						ssh.disconnect();
 						
-						msg = "Program upload successful!";
+						msg = success;
 					} catch ( final IOException e ) {
-						msg = " Error sending: " + e.getMessage();
+						msg = " SFTP Error: " + e.getMessage();
 					} finally {
 						sending.setVisible( false );
 						JOptionPane.showMessageDialog( InteractiveJTable.this, msg );
@@ -154,6 +143,55 @@ public class InteractiveJTable extends JPanel {
 			sending.setVisible( true );
 			
 		}
+	}
+	
+	private void downloadFile( final String host ) {
+		runSFTPCommand( host, new SFTPAction() {
+			@Override
+			public void run( SFTPClient sftp ) throws IOException {
+				// Right now this only downloads the PRG file
+				// Code for downloading the other two is commented here in case it's needed later
+				
+//				File jtb = new File( getTablePath() ), prg = new File( getProgramPath( (int) indexSelector.getValue() ) ), prm = new File( getParamPath() );
+				File prg = new File( getProgramPath( (int) indexSelector.getValue() ) );
+				
+				// Download the JTB file
+				// String remote = FTP_REMOTE_DIR + jtb.getName();
+				// sftp.put( jtb.getPath(), remote );
+				// sftp.get( remote, jtb.getPath() );
+				
+				// Download the PRG file
+				String remote = FTP_REMOTE_DIR + prg.getName();
+				sftp.get( remote, prg.getPath() );
+				
+				// Download the PRM file
+				// remote = FTP_REMOTE_DIR + prm.getName();
+				// sftp.get( remote, prm.getPath() );
+				
+				loadProgram( 1 );
+			}
+		}, "Downloading...", "Program download successful!" );
+	}
+	
+	private void sendFile( final String host ) {
+		runSFTPCommand( host, new SFTPAction() {
+			@Override
+			public void run( SFTPClient sftp ) throws IOException {
+				File jtb = new File( getTablePath() ), prg = new File( getProgramPath( (int) indexSelector.getValue() ) ), prm = new File( getParamPath() );
+				
+				// Send the JTB file
+				String remote = FTP_REMOTE_DIR + jtb.getName();
+				sftp.put( jtb.getPath(), remote );
+				
+				// Send the PRG file
+				remote = FTP_REMOTE_DIR + prg.getName();
+				sftp.put( prg.getPath(), remote );
+				
+				// Send the PRM file
+				remote = FTP_REMOTE_DIR + prm.getName();
+				sftp.put( prm.getPath(), remote );
+			}
+		}, "Sending...", "Program upload successful!" );
 	}
 	
 	public InteractiveJTable() {
@@ -207,8 +245,9 @@ public class InteractiveJTable extends JPanel {
 		// save.setEnabled( false );
 		params.setEnabled( false );
 		send.setEnabled( false );
+		download.setEnabled( false );
 		// JPanel controls = new JPanel(new GridLayout( 1, 3 ));
-		JPanel controls = new JPanel( new GridLayout( 1, 5 ) );
+		JPanel controls = new JPanel( new GridLayout( 1, 6 ) );
 		controls.setPreferredSize( new Dimension( getWidth(), 150 ) );
 		// INDEX SELECTOR
 		uneditedData = exportTableData();
@@ -277,12 +316,22 @@ public class InteractiveJTable extends JPanel {
 				}
 			}
 		} );
-		
+
+		// DOWNLOAD
+		download.addActionListener( new ActionListener() {
+			public void actionPerformed( ActionEvent e ) {
+				JTextField hostText = new JTextField();
+				if ( JOptionPane.showConfirmDialog( null, new Object[] { "Enter vehicle IP address", hostText }, "Download Program", JOptionPane.OK_CANCEL_OPTION ) == JOptionPane.OK_OPTION ) {
+					downloadFile( hostText.getText() );
+				}
+			}
+		} );
 		// controls.add( SwingUtils.createGridJPanel( 2, 1, indexSelector, ) );
 		controls.add( SwingUtils.createGridJPanel( 2, 1, insert, params ) );
 		controls.add( SwingUtils.createGridJPanel( 2, 1, delete, saveAs ) );
 		controls.add( SwingUtils.createGridJPanel( 2, 1, copy, load ) );
 		controls.add( SwingUtils.createGridJPanel( 2, 1, paste, send ) );
+		controls.add( download );
 		SwingUtils.setFont_r( controls, controls.getFont().deriveFont( 28.0f ).deriveFont( Font.BOLD ) );
 		
 		// COLUMN HEADER POPUP MENU CONTROLS
@@ -699,6 +748,7 @@ public class InteractiveJTable extends JPanel {
 			saveTableToPath( browser.getSelectedFile().getPath() );
 			params.setEnabled( true );
 			send.setEnabled( true );
+			download.setEnabled( true );
 			openFilePath = browser.getSelectedFile().getPath();
 		}
 	}
@@ -708,6 +758,7 @@ public class InteractiveJTable extends JPanel {
 			// Some initial setup
 			params.setEnabled( true );
 			send.setEnabled( true );
+			download.setEnabled( true );
 			openFilePath = browser.getSelectedFile().getPath();
 			indexSelector.setValue( ( (SpinnerNumberModel) indexSelector.getModel() ).getMinimum() );
 			try {
