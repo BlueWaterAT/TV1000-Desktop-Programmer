@@ -1,12 +1,12 @@
 package com.bwat.programmer;
+
 import javax.swing.JTable;
 import javax.swing.table.TableColumn;
-
 
 public class RowNumberHeader extends JTable {
 	private JTable parent;
 	
-	public RowNumberHeader(JTable table) {
+	public RowNumberHeader( JTable table ) {
 		super();
 		parent = table;
 		setAutoCreateColumnsFromModel( false );

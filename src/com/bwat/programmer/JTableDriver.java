@@ -1,4 +1,5 @@
 package com.bwat.programmer;
+
 import javax.swing.JFrame;
 
 public class JTableDriver {

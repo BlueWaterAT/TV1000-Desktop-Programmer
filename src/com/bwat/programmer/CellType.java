@@ -1,4 +1,5 @@
 package com.bwat.programmer;
+
 public enum CellType {
 	TEXT,
 	COMBO,

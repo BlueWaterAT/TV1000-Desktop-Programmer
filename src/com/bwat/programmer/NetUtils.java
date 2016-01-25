@@ -4,14 +4,14 @@ package com.bwat.programmer;
  * @author Kareem ElFaramawi
  */
 public class NetUtils {
-	public static final String IP_ADDRESS = "(\\d{1,3}\\.){3}\\d{1,3}";
-	public static final String PORT = "\\d+";
-
-	public static boolean isValidIPAddress(String ip) {
-		return ip.matches(IP_ADDRESS);
+	public static final String IP_ADDRESS_PATTERN = "^(([01]?[0-9]{1,2}\\.)|(2[0-4][0-9]\\.)|(25[0-5]\\.)){3}(([01]?[0-9]{1,2})|(2[0-4][0-9])|(25[0-5]))$";
+	public static final String PORT_PATTERN = "\\d{1,5}";
+	
+	public static boolean isValidIPAddress( String ip ) {
+		return ip.matches( IP_ADDRESS_PATTERN );
 	}
-
-	public static boolean isValidPort(String port) {
-		return port.matches(PORT);
+	
+	public static boolean isValidPort( String port ) {
+		return port.matches( PORT_PATTERN ) && Integer.parseInt( port ) <= 65535;
 	}
 }

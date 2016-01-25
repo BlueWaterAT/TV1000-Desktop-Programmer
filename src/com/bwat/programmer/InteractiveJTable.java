@@ -13,9 +13,9 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.Inet4Address;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Scanner;
 import java.util.Vector;
 
@@ -58,6 +58,9 @@ import javax.swing.table.TableColumn;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
@@ -68,12 +71,10 @@ public class InteractiveJTable extends JPanel {
 	private Vector<Object> rowCopy = null;
 	private JFileChooser browser = new JFileChooser();
 	private JSpinner indexSelector = new JSpinner( new SpinnerNumberModel( 1, 1, Integer.MAX_VALUE, 1 ) );
-	private JButton params = new JButton( "Parameters" );
 	private JButton insert = new JButton( "Insert Row" );
 	private JButton delete = new JButton( "Delete Row" );
 	private JButton copy = new JButton( "Copy Row" );
 	private JButton paste = new JButton( "Paste Row" );
-	// private JButton save = new JButton( "Save Table" );
 	private JButton saveAs = new JButton( "Save As..." );
 	private JButton load = new JButton( "Load Table" );
 	private JButton send = new JButton( "Send" );
@@ -86,113 +87,16 @@ public class InteractiveJTable extends JPanel {
 	private String openFilePath = null;
 	private Vector<String> tooltips = new Vector<String>();
 	private Vector<Vector<Object>> uneditedData;
-	private ParameterEditor paramEditor = new ParameterEditor( 255 );
-	public boolean loadingTable = false;
+	boolean loadingTable = false;
 	
 	// FTP related variables
 	private final static int FTP_PORT = 22;
 	private final static String FTP_USER = "root";
 	private final static String FTP_PASS = "bwat1234";
 	private final static String FTP_REMOTE_DIR = "/hmi/prg/";
+	private final static String IP_LIST_FILE = "IpAddress.txt";
 	
-	private void runSFTPCommand(final String host, final SFTPAction action, final String progressMsg, final String success) {
-		if ( host != null & NetUtils.isValidIPAddress( host ) ) {
-			// Display a loading dialog
-			final JDialog sending = new JDialog();
-			sending.setDefaultCloseOperation( JDialog.DO_NOTHING_ON_CLOSE );
-			sending.setModalityType( JDialog.DEFAULT_MODALITY_TYPE );
-			
-			JProgressBar progress = new JProgressBar();
-			progress.setIndeterminate( true );
-			
-			sending.add( SwingUtils.createGridJPanel( 2, 1, new JLabel( progressMsg ), progress ) );
-			sending.pack();
-			sending.setLocationRelativeTo( null );
-			
-			new Thread() {
-				public void run() {
-					// Save the table
-					saveTableToPath( openFilePath );
-					
-					// Get the file for sending
-					// File tableFile = new File( openFilePath );
-					String msg = "";
-					try {
-						SSHClient ssh = new SSHClient();
-						ssh.addHostKeyVerifier( new PromiscuousVerifier() );
-						ssh.connect( host, FTP_PORT );
-						ssh.authPassword( FTP_USER, FTP_PASS );
-						SFTPClient sftp = ssh.newSFTPClient();
-						
-						//Run the SFTP action
-						action.run( sftp );
-						
-						sftp.close();
-						ssh.disconnect();
-						
-						msg = success;
-					} catch ( final IOException e ) {
-						msg = " SFTP Error: " + e.getMessage();
-					} finally {
-						sending.setVisible( false );
-						JOptionPane.showMessageDialog( InteractiveJTable.this, msg );
-					}
-				}
-			}.start();
-			
-			sending.setVisible( true );
-			
-		}
-	}
-	
-	private void downloadFile( final String host ) {
-		runSFTPCommand( host, new SFTPAction() {
-			@Override
-			public void run( SFTPClient sftp ) throws IOException {
-				// Right now this only downloads the PRG file
-				// Code for downloading the other two is commented here in case it's needed later
-				
-//				File jtb = new File( getTablePath() ), prg = new File( getProgramPath( (int) indexSelector.getValue() ) ), prm = new File( getParamPath() );
-				File prg = new File( getProgramPath( (int) indexSelector.getValue() ) );
-				
-				// Download the JTB file
-				// String remote = FTP_REMOTE_DIR + jtb.getName();
-				// sftp.put( jtb.getPath(), remote );
-				// sftp.get( remote, jtb.getPath() );
-				
-				// Download the PRG file
-				String remote = FTP_REMOTE_DIR + prg.getName();
-				sftp.get( remote, prg.getPath() );
-				
-				// Download the PRM file
-				// remote = FTP_REMOTE_DIR + prm.getName();
-				// sftp.get( remote, prm.getPath() );
-				
-				loadProgram( 1 );
-			}
-		}, "Downloading...", "Program download successful!" );
-	}
-	
-	private void sendFile( final String host ) {
-		runSFTPCommand( host, new SFTPAction() {
-			@Override
-			public void run( SFTPClient sftp ) throws IOException {
-				File jtb = new File( getTablePath() ), prg = new File( getProgramPath( (int) indexSelector.getValue() ) ), prm = new File( getParamPath() );
-				
-				// Send the JTB file
-				String remote = FTP_REMOTE_DIR + jtb.getName();
-				sftp.put( jtb.getPath(), remote );
-				
-				// Send the PRG file
-				remote = FTP_REMOTE_DIR + prg.getName();
-				sftp.put( prg.getPath(), remote );
-				
-				// Send the PRM file
-				remote = FTP_REMOTE_DIR + prm.getName();
-				sftp.put( prm.getPath(), remote );
-			}
-		}, "Sending...", "Program upload successful!" );
-	}
+	Logger log = LoggerFactory.getLogger( InteractiveJTable.class );
 	
 	public InteractiveJTable() {
 		table.setModel( new DefaultTableModel( 2, 14 ) {
@@ -201,6 +105,7 @@ public class InteractiveJTable extends JPanel {
 				if ( !loadingTable ) {
 					CellType type = columnTypes.get( columnIndex );
 					if ( type == CellType.COMBO ) {
+						@SuppressWarnings( "unchecked" )
 						JComboBox<String> combo = (JComboBox<String>) table.getCellRenderer( 0, columnIndex );
 						
 						// Convert combo entries to an array because this method doesn't exist for some god
@@ -243,31 +148,16 @@ public class InteractiveJTable extends JPanel {
 		// CONTROLS
 		paste.setEnabled( false );
 		// save.setEnabled( false );
-		params.setEnabled( false );
 		send.setEnabled( false );
 		download.setEnabled( false );
 		// JPanel controls = new JPanel(new GridLayout( 1, 3 ));
-		JPanel controls = new JPanel( new GridLayout( 1, 6 ) );
+		JPanel controls = new JPanel( new GridLayout( 1, 5 ) );
 		controls.setPreferredSize( new Dimension( getWidth(), 150 ) );
 		// INDEX SELECTOR
 		uneditedData = exportTableData();
 		indexSelector.addChangeListener( new ChangeListener() {
 			public void stateChanged( ChangeEvent e ) {
 				loadProgram( (int) indexSelector.getValue() );
-			}
-		} );
-		// PARAMS
-		params.addActionListener( new ActionListener() {
-			public void actionPerformed( ActionEvent e ) {
-				paramEditor.setVisible( true );
-				if ( openFilePath != null ) {
-					String path = openFilePath;
-					if ( path.endsWith( EXTENSION ) ) {
-						path = openFilePath.substring( 0, openFilePath.lastIndexOf( EXTENSION ) );
-					}
-					paramEditor.setPath( path + ParameterEditor.PARAM_EXTENSION );
-				}
-				paramEditor.loadParameters();
 			}
 		} );
 		// INSERT
@@ -310,28 +200,35 @@ public class InteractiveJTable extends JPanel {
 		// SEND
 		send.addActionListener( new ActionListener() {
 			public void actionPerformed( ActionEvent e ) {
-				JTextField hostText = new JTextField();
-				if ( JOptionPane.showConfirmDialog( null, new Object[] { "Enter vehicle IP address", hostText }, "Send Program", JOptionPane.OK_CANCEL_OPTION ) == JOptionPane.OK_OPTION ) {
-					sendFile( hostText.getText() );
+				// Get the initial IP
+				String ip = promptIPAddress();
+				if ( ip != null ) {
+					// Split the IP, separating the last number as an int
+					String base = ip.substring( 0, ip.lastIndexOf( '.' ) );
+					int vNum = Integer.parseInt( ip.substring( ip.lastIndexOf( '.' ) + 1 ) );
+					
+					// Prompt for how many vehicles to send to
+					JSpinner vCount = new JSpinner( new SpinnerNumberModel( 1, 1, 256 - vNum, 1 ) );
+					if ( JOptionPane.showConfirmDialog( null, new Object[] { "How many vehicles do you want to send the program to?", vCount }, "Send Program", JOptionPane.OK_CANCEL_OPTION ) == JOptionPane.OK_OPTION ) {
+						// Send to all vehicles
+						for ( int i = 0, c = (int) vCount.getValue(); i < c; i++ ) {
+							sendFile( base + "." + ( vNum + i ) );
+						}
+					}
+					
 				}
 			}
 		} );
-
 		// DOWNLOAD
 		download.addActionListener( new ActionListener() {
 			public void actionPerformed( ActionEvent e ) {
-				JTextField hostText = new JTextField();
-				if ( JOptionPane.showConfirmDialog( null, new Object[] { "Enter vehicle IP address", hostText }, "Download Program", JOptionPane.OK_CANCEL_OPTION ) == JOptionPane.OK_OPTION ) {
-					downloadFile( hostText.getText() );
-				}
+				downloadFile( promptIPAddress() );
 			}
 		} );
-		// controls.add( SwingUtils.createGridJPanel( 2, 1, indexSelector, ) );
-		controls.add( SwingUtils.createGridJPanel( 2, 1, insert, params ) );
-		controls.add( SwingUtils.createGridJPanel( 2, 1, delete, saveAs ) );
-		controls.add( SwingUtils.createGridJPanel( 2, 1, copy, load ) );
-		controls.add( SwingUtils.createGridJPanel( 2, 1, paste, send ) );
-		controls.add( download );
+		controls.add( SwingUtils.createGridJPanel( 2, 1, insert, saveAs ) );
+		controls.add( SwingUtils.createGridJPanel( 2, 1, delete, load ) );
+		controls.add( SwingUtils.createGridJPanel( 2, 1, copy, send ) );
+		controls.add( SwingUtils.createGridJPanel( 2, 1, paste, download ) );
 		SwingUtils.setFont_r( controls, controls.getFont().deriveFont( 28.0f ).deriveFont( Font.BOLD ) );
 		
 		// COLUMN HEADER POPUP MENU CONTROLS
@@ -516,15 +413,133 @@ public class InteractiveJTable extends JPanel {
 		add( controls, BorderLayout.SOUTH );
 	}
 	
-	// public void resetSort() {
-	// table.setAutoCreateRowSorter( true );
-	// DefaultRowSorter sorter = ( (DefaultRowSorter) table.getRowSorter() );
-	// table.setRowSorter( sorter );
-	// ArrayList<RowSorter.SortKey> sortKeys = new ArrayList<RowSorter.SortKey>();
-	// sortKeys.add( new RowSorter.SortKey( 0, SortOrder.ASCENDING ) );
-	// sorter.setSortKeys( sortKeys );
-	// sorter.setSortsOnUpdates( true );
-	// }
+	String promptIPAddress() {
+		String host = null;
+		
+		JComboBox<String> ipSelect = new JComboBox<String>();
+		ipSelect.setEditable( true );
+		ipSelect.setMaximumRowCount( 10 );
+		
+		try {
+			File ipList = new File( IP_LIST_FILE );
+			HashSet<String> ips = new HashSet<String>();
+			if ( ipList.exists() ) {
+				Scanner scan = new Scanner( ipList );
+				String ip;
+				while ( scan.hasNext() ) {
+					ip = scan.nextLine();
+					if ( NetUtils.isValidIPAddress( ip ) ) {
+						ips.add( ip );
+						ipSelect.addItem( ip );
+					}
+				}
+				scan.close();
+			}
+			
+			if ( JOptionPane.showConfirmDialog( null, new Object[] { "Enter vehicle IP address", ipSelect }, "Send Program", JOptionPane.OK_CANCEL_OPTION ) == JOptionPane.OK_OPTION ) {
+				String ip = ipSelect.getSelectedItem().toString();
+				if ( NetUtils.isValidIPAddress( ip ) ) {
+					host = ip;
+					ips.add( host );
+				} else {
+					JOptionPane.showMessageDialog( null, "Invalid IP Address!" );
+				}
+			}
+			
+			if ( !ips.isEmpty() ) {
+				PrintWriter pw = new PrintWriter( ipList );
+				for ( String ip : ips ) {
+					pw.println( ip );
+				}
+				pw.close();
+			}
+		} catch ( FileNotFoundException e ) {
+			e.printStackTrace();
+		}
+		return host;
+	}
+	
+	private void runSFTPCommand( final String host, final SFTPAction action, final String progressMsg, final String success ) {
+		if ( host != null && NetUtils.isValidIPAddress( host ) ) {
+			// Display a loading dialog
+			final JDialog sending = new JDialog();
+			sending.setDefaultCloseOperation( JDialog.DO_NOTHING_ON_CLOSE );
+			sending.setModalityType( JDialog.DEFAULT_MODALITY_TYPE );
+			
+			JProgressBar progress = new JProgressBar();
+			progress.setIndeterminate( true );
+			
+			sending.add( SwingUtils.createGridJPanel( 2, 1, new JLabel( progressMsg ), progress ) );
+			sending.pack();
+			sending.setLocationRelativeTo( null );
+			
+			new Thread() {
+				public void run() {
+					// Save the table
+					saveTableToPath( openFilePath );
+					
+					String msg = "";
+					try {
+						// Open connection
+						SSHClient ssh = new SSHClient();
+						ssh.addHostKeyVerifier( new PromiscuousVerifier() );
+						ssh.connect( host, FTP_PORT );
+						ssh.authPassword( FTP_USER, FTP_PASS );
+						SFTPClient sftp = ssh.newSFTPClient();
+						
+						// Run the SFTP action
+						action.run( sftp );
+						
+						// Close the connection
+						sftp.close();
+						ssh.close();
+						
+						msg = success;
+					} catch ( final IOException e ) {
+						msg = " SFTP Error: " + e.getMessage();
+					} finally {
+						sending.setVisible( false );
+						JOptionPane.showMessageDialog( InteractiveJTable.this, msg );
+						log.debug( msg );
+					}
+				}
+			}.start();
+			
+			sending.setVisible( true );
+			
+		} else {
+			JOptionPane.showMessageDialog( null, "Invalid IP Address!" );
+		}
+	}
+	
+	private void downloadFile( final String host ) {
+		runSFTPCommand( host, new SFTPAction() {
+			@Override
+			public void run( SFTPClient sftp ) throws IOException {
+				File prg = new File( getProgramPath( (int) indexSelector.getValue() ) );
+				
+				// Download the PRG file
+				String remote = FTP_REMOTE_DIR + prg.getName();
+				sftp.get( remote, prg.getPath() );
+				
+				// Reload the program data
+				loadProgram( 1 );
+			}
+		}, "Downloading from " + host + "...", "Program download successful!" );
+	}
+	
+	private void sendFile( final String host ) {
+		runSFTPCommand( host, new SFTPAction() {
+			@Override
+			public void run( SFTPClient sftp ) throws IOException {
+				File prg = new File( getProgramPath( (int) indexSelector.getValue() ) );
+				
+				// Send the PRG file
+				String remote = FTP_REMOTE_DIR + prg.getName();
+				sftp.put( prg.getPath(), remote );
+			}
+		}, "Sending to " + host + "...", "Program upload successful!" );
+	}
 	
 	public void loadProgram( int prog ) {
 		if ( prog > 0 ) {
@@ -660,12 +675,14 @@ public class InteractiveJTable extends JPanel {
 	}
 	
 	public void pasteRow( int row ) {
+		loadingTable = true;
 		if ( row >= 0 && row < table.getRowCount() && rowCopy != null ) {
 			table.editCellAt( -1, -1 );
 			for ( int col = 0; col < table.getColumnCount(); col++ ) {
 				table.setValueAt( rowCopy.get( col ), row, col );
 			}
 		}
+		loadingTable = false;
 	}
 	
 	public Vector<Vector<Object>> exportTableData() {
@@ -746,7 +763,6 @@ public class InteractiveJTable extends JPanel {
 	public void saveTableAs() {
 		if ( browser.showSaveDialog( this ) == JFileChooser.APPROVE_OPTION ) {
 			saveTableToPath( browser.getSelectedFile().getPath() );
-			params.setEnabled( true );
 			send.setEnabled( true );
 			download.setEnabled( true );
 			openFilePath = browser.getSelectedFile().getPath();
@@ -756,7 +772,7 @@ public class InteractiveJTable extends JPanel {
 	public void loadTable() {
 		if ( browser.showOpenDialog( this ) == JFileChooser.APPROVE_OPTION ) {
 			// Some initial setup
-			params.setEnabled( true );
+			loadingTable = true;
 			send.setEnabled( true );
 			download.setEnabled( true );
 			openFilePath = browser.getSelectedFile().getPath();
@@ -790,7 +806,7 @@ public class InteractiveJTable extends JPanel {
 				}
 				indexSelector.setValue( 1 );
 				loadProgram( 1 );
-				// resetSort();
+				loadingTable = false;
 			} catch ( FileNotFoundException e ) {
 				e.printStackTrace();
 			}
@@ -824,7 +840,6 @@ public class InteractiveJTable extends JPanel {
 				}
 			}
 			scan.close();
-			// uneditedData = exportTableData();
 		} catch ( FileNotFoundException e ) {
 			e.printStackTrace();
 		}
@@ -846,9 +861,5 @@ public class InteractiveJTable extends JPanel {
 	
 	private String getProgramPath( int program ) {
 		return String.format( "%s-%d%s", getProgramBaseFileName(), program, PROGRAM_EXTENSION );
-	}
-	
-	private String getParamPath() {
-		return String.format( "%s%s", getProgramBaseFileName(), ParameterEditor.PARAM_EXTENSION );
 	}
 }
