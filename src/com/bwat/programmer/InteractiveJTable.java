@@ -13,7 +13,6 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Scanner;
@@ -21,7 +20,6 @@ import java.util.Vector;
 
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultComboBoxModel;
-import javax.swing.DefaultRowSorter;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
@@ -38,8 +36,6 @@ import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
-import javax.swing.RowSorter;
-import javax.swing.SortOrder;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
@@ -58,12 +54,15 @@ import javax.swing.table.TableColumn;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.bwat.util.NetUtils;
+import com.bwat.util.SwingUtils;
 
 public class InteractiveJTable extends JPanel {
 	private Vector<CellType> columnTypes;
@@ -87,45 +86,24 @@ public class InteractiveJTable extends JPanel {
 	private String openFilePath = null;
 	private Vector<String> tooltips = new Vector<String>();
 	private Vector<Vector<Object>> uneditedData;
-	boolean loadingTable = false;
 	
 	// FTP related variables
-	private final static int FTP_PORT = 22;
-	private final static String FTP_USER = "root";
-	private final static String FTP_PASS = "bwat1234";
-	private final static String FTP_REMOTE_DIR = "/hmi/prg/";
+	private final static int SFTP_PORT = 22;
+	private final static String SFTP_USER = "root";
+	private final static String SFTP_PASS = "bwat1234";
+	private final static String SFTP_REMOTE_DIR = "/hmi/prg/";
 	private final static String IP_LIST_FILE = "IpAddress.txt";
 	
-	Logger log = LoggerFactory.getLogger( InteractiveJTable.class );
+	Logger log = LoggerFactory.getLogger( getClass() );
 	
 	public InteractiveJTable() {
-		table.setModel( new DefaultTableModel( 2, 14 ) {
-			@Override
-			public Class<?> getColumnClass( int columnIndex ) {
-				if ( !loadingTable ) {
-					CellType type = columnTypes.get( columnIndex );
-					if ( type == CellType.COMBO ) {
-						@SuppressWarnings( "unchecked" )
-						JComboBox<String> combo = (JComboBox<String>) table.getCellRenderer( 0, columnIndex );
-						
-						// Convert combo entries to an array because this method doesn't exist for some god
-						// forsaken reason
-						String[] entries = new String[combo.getItemCount()];
-						for ( int i = 0; i < combo.getItemCount(); i++ ) {
-							entries[i] = combo.getItemAt( i );
-						}
-						return columnTypes.get( columnIndex ).getCellClass( entries );
-					}
-					return columnTypes.get( columnIndex ).getCellClass();
-				}
-				return super.getColumnClass( columnIndex );
-			}
-		} );
+		table.setModel( new DefaultTableModel( 2, 14 ) );
 		
 		// Intial setup
 		setPreferredSize( new Dimension( 950, 800 ) );
 		table.setSelectionMode( ListSelectionModel.SINGLE_SELECTION );
 		table.setRowHeight( 25 );
+		
 		// File browser options
 		browser.setFileSelectionMode( JFileChooser.FILES_AND_DIRECTORIES );
 		browser.setFileFilter( new FileFilter() {
@@ -137,6 +115,7 @@ public class InteractiveJTable extends JPanel {
 				return f.isDirectory() || f.getName().toLowerCase().endsWith( EXTENSION );
 			}
 		} );
+		
 		// Initialize column data types
 		columnTypes = new Vector<CellType>( table.getColumnCount() );
 		for ( int i = 0; i < columnTypes.capacity(); i++ ) {
@@ -380,16 +359,6 @@ public class InteractiveJTable extends JPanel {
 			public void columnAdded( TableColumnModelEvent e ) {}
 		} );
 		
-		// resetSort();
-		table.setAutoCreateRowSorter( true );
-		DefaultRowSorter sorter = ( (DefaultRowSorter) table.getRowSorter() );
-		table.setRowSorter( sorter );
-		ArrayList<RowSorter.SortKey> sortKeys = new ArrayList<RowSorter.SortKey>();
-		sortKeys.add( new RowSorter.SortKey( 0, SortOrder.ASCENDING ) );
-		
-		sorter.setSortKeys( sortKeys );
-		sorter.setSortsOnUpdates( true );
-		
 		table.getModel().addTableModelListener( new TableModelListener() {
 			@Override
 			public void tableChanged( TableModelEvent e ) {
@@ -415,7 +384,6 @@ public class InteractiveJTable extends JPanel {
 	
 	String promptIPAddress() {
 		String host = null;
-		
 		JComboBox<String> ipSelect = new JComboBox<String>();
 		ipSelect.setEditable( true );
 		ipSelect.setMaximumRowCount( 10 );
@@ -434,6 +402,9 @@ public class InteractiveJTable extends JPanel {
 					}
 				}
 				scan.close();
+				log.info( "IPs loaded from {}", IP_LIST_FILE );
+			} else {
+				log.info( "{} not found, nothing loaded", IP_LIST_FILE );
 			}
 			
 			if ( JOptionPane.showConfirmDialog( null, new Object[] { "Enter vehicle IP address", ipSelect }, "Send Program", JOptionPane.OK_CANCEL_OPTION ) == JOptionPane.OK_OPTION ) {
@@ -483,8 +454,8 @@ public class InteractiveJTable extends JPanel {
 						// Open connection
 						SSHClient ssh = new SSHClient();
 						ssh.addHostKeyVerifier( new PromiscuousVerifier() );
-						ssh.connect( host, FTP_PORT );
-						ssh.authPassword( FTP_USER, FTP_PASS );
+						ssh.connect( host, SFTP_PORT );
+						ssh.authPassword( SFTP_USER, SFTP_PASS );
 						SFTPClient sftp = ssh.newSFTPClient();
 						
 						// Run the SFTP action
@@ -495,12 +466,13 @@ public class InteractiveJTable extends JPanel {
 						ssh.close();
 						
 						msg = success;
+						log.debug( msg );
 					} catch ( final IOException e ) {
 						msg = " SFTP Error: " + e.getMessage();
+						log.error( msg );
 					} finally {
 						sending.setVisible( false );
 						JOptionPane.showMessageDialog( InteractiveJTable.this, msg );
-						log.debug( msg );
 					}
 				}
 			}.start();
@@ -519,7 +491,7 @@ public class InteractiveJTable extends JPanel {
 				File prg = new File( getProgramPath( (int) indexSelector.getValue() ) );
 				
 				// Download the PRG file
-				String remote = FTP_REMOTE_DIR + prg.getName();
+				String remote = SFTP_REMOTE_DIR + prg.getName();
 				sftp.get( remote, prg.getPath() );
 				
 				// Reload the program data
@@ -535,7 +507,7 @@ public class InteractiveJTable extends JPanel {
 				File prg = new File( getProgramPath( (int) indexSelector.getValue() ) );
 				
 				// Send the PRG file
-				String remote = FTP_REMOTE_DIR + prg.getName();
+				String remote = SFTP_REMOTE_DIR + prg.getName();
 				sftp.put( prg.getPath(), remote );
 			}
 		}, "Sending to " + host + "...", "Program upload successful!" );
@@ -550,6 +522,7 @@ public class InteractiveJTable extends JPanel {
 				String progPath = openFilePath.substring( 0, openFilePath.endsWith( EXTENSION ) ? openFilePath.lastIndexOf( EXTENSION ) : openFilePath.length() ) + "-" + prog + PROGRAM_EXTENSION;
 				if ( new File( progPath ).exists() ) {
 					loadTableData( progPath );
+					log.info( "Program {} Successfully loaded", prog );
 				}
 			}
 			uneditedData = exportTableData();
@@ -675,14 +648,12 @@ public class InteractiveJTable extends JPanel {
 	}
 	
 	public void pasteRow( int row ) {
-		loadingTable = true;
 		if ( row >= 0 && row < table.getRowCount() && rowCopy != null ) {
 			table.editCellAt( -1, -1 );
 			for ( int col = 0; col < table.getColumnCount(); col++ ) {
 				table.setValueAt( rowCopy.get( col ), row, col );
 			}
 		}
-		loadingTable = false;
 	}
 	
 	public Vector<Vector<Object>> exportTableData() {
@@ -772,7 +743,6 @@ public class InteractiveJTable extends JPanel {
 	public void loadTable() {
 		if ( browser.showOpenDialog( this ) == JFileChooser.APPROVE_OPTION ) {
 			// Some initial setup
-			loadingTable = true;
 			send.setEnabled( true );
 			download.setEnabled( true );
 			openFilePath = browser.getSelectedFile().getPath();
@@ -804,9 +774,10 @@ public class InteractiveJTable extends JPanel {
 						setColumnType( i, CellType.NUMBER );
 					}
 				}
+				
+				log.info( "JTB Successfully loaded" );
 				indexSelector.setValue( 1 );
 				loadProgram( 1 );
-				loadingTable = false;
 			} catch ( FileNotFoundException e ) {
 				e.printStackTrace();
 			}

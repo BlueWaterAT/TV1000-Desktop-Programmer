@@ -1,4 +1,4 @@
-package com.bwat.programmer;
+package com.bwat.util;
 
 import java.awt.Component;
 import java.awt.Container;
