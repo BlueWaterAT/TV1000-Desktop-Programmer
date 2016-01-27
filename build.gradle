@@ -1,0 +1,41 @@
+apply plugin: 'java'
+apply plugin: 'idea'
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'net.schmizz:sshj:0.10.0'
+    compile 'org.slf4j:slf4j-api:1.7.14'
+    compile 'ch.qos.logback:logback-core:1.1.3'
+    compile 'ch.qos.logback:logback-classic:1.1.3'
+}
+
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'TV1000 Programmer', 'Main-Class': 'com.bwat.programmer.JTableDriver'
+    }
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+}
+
+uploadArchives {
+    repositories {
+        flatDir {
+            dirs 'build'
+        }
+    }
+}
+
