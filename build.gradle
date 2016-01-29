@@ -25,17 +25,9 @@ dependencies {
 
 jar {
     manifest {
-        attributes 'Implementation-Title': 'TV1000 Programmer', 'Main-Class': 'com.bwat.programmer.JTableDriver'
+        attributes 'Implementation-Title': 'TV1000 Programmer', 'Main-Class': 'com.bwat.programmer.TV1000Programmer'
     }
     from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
     exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
-}
-
-uploadArchives {
-    repositories {
-        flatDir {
-            dirs 'build'
-        }
-    }
 }
 
