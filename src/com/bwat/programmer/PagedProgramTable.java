@@ -73,7 +73,6 @@ public class PagedProgramTable extends JPanel {
 
     /**
      * Initializes the GUI components for this PagedProgramTable
-     * TODO: Add an option to set pageSize
      */
     private void initGUI() {
         // JTable settings
@@ -181,7 +180,7 @@ public class PagedProgramTable extends JPanel {
      * @return The number of pages that the program has been divided into
      */
     public int getNumPages() {
-        return (int) Math.max(1, Math.ceil((double) getNumRows() / pageSize)); // TODO: Make sure this works
+        return (int) Math.max(1, Math.ceil((double) getNumRows() / pageSize));
     }
 
     /**
