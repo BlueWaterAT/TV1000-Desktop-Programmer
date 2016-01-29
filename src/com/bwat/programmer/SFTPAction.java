@@ -1,9 +1,9 @@
 package com.bwat.programmer;
 
-import java.io.IOException;
-
 import net.schmizz.sshj.sftp.SFTPClient;
 
+import java.io.IOException;
+
 public interface SFTPAction {
-	void run( SFTPClient sftp ) throws IOException;
+    void run(SFTPClient sftp) throws IOException;
 }
