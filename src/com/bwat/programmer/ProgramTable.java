@@ -17,12 +17,8 @@ import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.event.ChangeEvent;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.TableColumnModelEvent;
-import javax.swing.event.TableColumnModelListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumn;
@@ -44,6 +40,12 @@ import java.util.Vector;
 
 import static com.bwat.programmer.Constants.*;
 
+/**
+ * A wrapper around a JTable that gives functionality for loading and saving the table,
+ * as well as editing the column types
+ *
+ * @author Kareem ElFaramawi
+ */
 public class ProgramTable extends JTable {
     Logger log = LoggerFactory.getLogger(getClass());
 
@@ -171,8 +173,8 @@ public class ProgramTable extends JTable {
                 dialog.add(new JLabel("Tooltip:"));
                 dialog.add(tooltip);
                 if (JOptionPane.showConfirmDialog(null, dialog, "Column Settings", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
-                    setColumnHeader(popupCol, name.getText());
-                    tooltips.set(popupCol, tooltip.getText());
+                    setColumnHeader(popupCol, name.getText().length() > 0 ? name.getText() : " ");
+                    tooltips.set(popupCol, tooltip.getText().length() > 0 ? tooltip.getText() : " ");
                 }
                 repaint();
             }
@@ -220,28 +222,8 @@ public class ProgramTable extends JTable {
         headerMenu.add(jmi_add);
         headerMenu.add(jmi_delete);
 
-        // Fix column types when reordering
-        getColumnModel().addColumnModelListener(new TableColumnModelListener() {
-            public void columnMoved(TableColumnModelEvent e) {
-                if (e.getFromIndex() != e.getToIndex()) {
-                    columnTypes.add(e.getToIndex(), columnTypes.remove(e.getFromIndex()));
-                    tooltips.add(e.getToIndex(), tooltips.remove(e.getFromIndex()));
-// 					paste.setEnabled( false );
-                }
-            }
-
-            public void columnSelectionChanged(ListSelectionEvent e) {
-            }
-
-            public void columnRemoved(TableColumnModelEvent e) {
-            }
-
-            public void columnMarginChanged(ChangeEvent e) {
-            }
-
-            public void columnAdded(TableColumnModelEvent e) {
-            }
-        });
+        // Disallow column reordering
+        getTableHeader().setReorderingAllowed(false);
     }
 
     /**
@@ -312,10 +294,6 @@ public class ProgramTable extends JTable {
                     // Add a change listener to the textfield
                     numberField.getDocument().addDocumentListener(new DocumentListener() {
                         @Override
-                        public void removeUpdate(DocumentEvent e) {
-                        }
-
-                        @Override
                         public void insertUpdate(final DocumentEvent e) {
                             SwingUtilities.invokeLater(new Runnable() {
                                 @Override
@@ -336,13 +314,15 @@ public class ProgramTable extends JTable {
                                     }
                                 }
                             });
-
                         }
 
                         @Override
                         public void changedUpdate(DocumentEvent e) {
                             insertUpdate(e);
                         }
+
+                        @Override
+                        public void removeUpdate(DocumentEvent e) {}
                     });
                     getColumnModel().getColumn(column).setCellEditor(new DefaultCellEditor(numberField));
                     getColumnModel().getColumn(column).setCellRenderer(new DefaultTableCellRenderer());
@@ -369,18 +349,6 @@ public class ProgramTable extends JTable {
      */
     public void insertRow() {
         ((DefaultTableModel) getModel()).addRow(new Vector<Object>());
-    }
-
-    /**
-     * Deletes a row from the table
-     *
-     * @param row Row index
-     */
-    public void deleteRow(int row) {
-        if (row >= 0 && row < getRowCount()) {
-            row = convertRowIndexToModel(row);
-            ((DefaultTableModel) getModel()).removeRow(row);
-        }
     }
 
     /**
@@ -468,21 +436,31 @@ public class ProgramTable extends JTable {
         return line;
     }
 
+    /**
+     * Saves the JTB table and creates a blank PRG file
+     *
+     * @param path Path to save the JTB
+     */
     public void saveTableToPath(String path) {
+        // Extension fix
         if (!path.endsWith(EXTENSION)) {
             path += EXTENSION;
         }
+
         try {
             // Save table settings
             PrintWriter pw = new PrintWriter(new FileOutputStream(new File(path)));
             pw.println(COMMENT + "Interactive JTable Save Data");
             pw.println("\n" + COMMENT + "Column Headers and Tooltips, the number of headers sets the number of columns:");
+
+            // Print out all the column headers and tooltips
             for (int i = 0; i < getColumnCount(); i++) {
                 pw.print(getColumnModel().getColumn(i).getHeaderValue() + (i == getColumnCount() - 1 ? "\n" : COMMA));
             }
             for (int i = 0; i < getColumnCount(); i++) {
                 pw.print(tooltips.get(i) + (i == getColumnCount() - 1 ? "\n" : COMMA));
             }
+
             pw.println("\n" + COMMENT + "The following lines are all the data types of the columns");
             pw.println(COMMENT + "There are 4 types: Text, Checkbox, Combo Box, and Number. Their syntax is as follows:");
             pw.printf("%s\"%s\"\n", COMMENT, CellType.TEXT.getTypeName());
@@ -490,6 +468,8 @@ public class ProgramTable extends JTable {
             pw.printf("%s\"%s,choice,choice,choice,...\"\n", COMMENT, CellType.COMBO.getTypeName());
             pw.printf("%s\"%s\"\n", COMMENT, CellType.NUMBER.getTypeName());
             pw.println(COMMENT + "The number of lines MUST equal the number of columns");
+
+            // Print out all of the column types
             for (int i = 0; i < getColumnCount(); i++) {
                 switch (columnTypes.get(i)) {
                     case TEXT:
@@ -500,6 +480,7 @@ public class ProgramTable extends JTable {
                         break;
                     case COMBO:
                         pw.print("combo,");
+                        // Print all of the combo box entries on the same line
                         JComboBox<String> combo = (JComboBox<String>) getColumnModel().getColumn(i).getCellEditor().getTableCellEditorComponent(null, null, false, -1, i);
                         for (int j = 0; j < combo.getItemCount(); j++) {
                             pw.print(combo.getItemAt(j) + (j == combo.getItemCount() - 1 ? "\n" : COMMA));
@@ -514,15 +495,18 @@ public class ProgramTable extends JTable {
             pw.close();
             log.info("JTB file \"{}\" successfully saved", path);
 
-            // Create a blank PRG file
+            // Create a blank PRG file if it doesn't exist
             int index = PROGRAM_DEFAULT;
             if (index > 0) {
                 path = path.substring(0, path.lastIndexOf(EXTENSION)) + "-" + index + PROGRAM_EXTENSION;
-                pw = new PrintWriter(new FileOutputStream(new File(path)));
-                pw.close();
-                log.info("Blank PRG file successfully saved to \"{}\"", path);
+                if (!(new File(path).exists())) {
+                    pw = new PrintWriter(new FileOutputStream(new File(path)));
+                    pw.close();
+                    log.info("Blank PRG file successfully saved to \"{}\"", path);
+                }
             }
         } catch (FileNotFoundException e) {
+            log.error("Error creating JTB file");
             e.printStackTrace();
         }
     }

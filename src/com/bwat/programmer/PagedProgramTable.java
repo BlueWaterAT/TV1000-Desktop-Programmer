@@ -13,6 +13,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
@@ -34,6 +35,9 @@ import static com.bwat.programmer.Constants.*;
 public class PagedProgramTable extends JPanel {
     Logger log = LoggerFactory.getLogger(getClass());
 
+    // GUI
+    final ProgramTable table = new ProgramTable(2, 14);
+
     // Path to the PRG file
     String programPath;
 
@@ -49,20 +53,23 @@ public class PagedProgramTable extends JPanel {
     // Cache of the data for the currently displayed rows
     ArrayList<ArrayList<Object>> displayedRows = new ArrayList<ArrayList<Object>>();
 
-    // GUI
-    final ProgramTable table = new ProgramTable(2, 14);
+    // Indicates if this is currently making changes to the ProgramTable
+    boolean selfChanging = false;
+
     // Page controls
     JPanel ctrlPanel = new JPanel(new BorderLayout());
     JButton jumpPrev = new JButton("\u2190");
     JButton jumpPage = new JButton("");
     JButton jumpNext = new JButton("\u2192");
     JButton jumpRow = new JButton("Jump to Row");
+    JButton updatePageSize = new JButton("Set Page Size");
     RowNumberHeader rowHeader;
 
     public PagedProgramTable() {
         initGUI();
         jumpToPage(1);
     }
+
 
     /**
      * Initializes the GUI components for this PagedProgramTable
@@ -72,6 +79,7 @@ public class PagedProgramTable extends JPanel {
         // JTable settings
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(25);
+
 
         // Action listeners for all buttons
 
@@ -100,9 +108,10 @@ public class PagedProgramTable extends JPanel {
                 JPanel spinnerPanel = new JPanel(new BorderLayout());
                 spinnerPanel.add(pageSelect, BorderLayout.CENTER);
                 spinnerPanel.add(new JLabel(" / " + getNumPages()), BorderLayout.EAST);
+                SwingUtils.setFont_r(spinnerPanel, spinnerPanel.getFont().deriveFont(FONT_SIZE));
 
                 // Prompt the user for the page # they want to jump to
-                if (JOptionPane.showConfirmDialog(null, new Object[]{"Enter page number", spinnerPanel}, "Jump to Page", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("Enter page number", FONT_SIZE), spinnerPanel}, "Jump to Page", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
                     jumpToPage((int) pageSelect.getValue()); // Jump to the selected page
                 }
             }
@@ -118,19 +127,37 @@ public class PagedProgramTable extends JPanel {
                     JPanel spinnerPanel = new JPanel(new BorderLayout());
                     spinnerPanel.add(rowSelect, BorderLayout.CENTER);
                     spinnerPanel.add(new JLabel(" / " + getNumRows()), BorderLayout.EAST);
+                    SwingUtils.setFont_r(spinnerPanel, spinnerPanel.getFont().deriveFont(FONT_SIZE));
 
                     // Prompt the user for the row # they want to jump to
-                    if (JOptionPane.showConfirmDialog(null, new Object[]{"Enter row number", spinnerPanel}, "Jump to Row", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                    if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("Enter row number", FONT_SIZE), spinnerPanel}, "Jump to Row", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
                         jumpToRow((int) rowSelect.getValue());
                     }
                 }
             }
         });
 
+        //Set the number of rows displayed on a page
+        updatePageSize.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                // Prompt setup
+                JSpinner sizeSelect = new JSpinner(new SpinnerNumberModel(pageSize, 1, 100, 1));
+                sizeSelect.setFont(sizeSelect.getFont().deriveFont(FONT_SIZE));
+
+                // Prompt the user for the new pageSize
+                if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("Enter row number", FONT_SIZE), sizeSelect}, "Jump to Row", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                    //Set the pageSize and reload the first page
+                    pageSize = (int) sizeSelect.getValue();
+                    jumpToPage(1);
+                }
+            }
+        });
+
         // Assemble control panel
         ctrlPanel.add(SwingUtils.createGridJPanel(1, 3, jumpPrev, jumpPage, jumpNext), BorderLayout.WEST);
-        ctrlPanel.add(jumpRow, BorderLayout.EAST);
-        SwingUtils.setFont_r(ctrlPanel, ctrlPanel.getFont().deriveFont(28.0f).deriveFont(Font.BOLD));
+        ctrlPanel.add(SwingUtils.createGridJPanel(1, 2, updatePageSize, jumpRow), BorderLayout.EAST);
+        SwingUtils.setFont_r(ctrlPanel, ctrlPanel.getFont().deriveFont(FONT_SIZE).deriveFont(Font.BOLD));
 
         // Scroll panel for the table with headers
         JScrollPane scroll = new JScrollPane(table);
@@ -141,6 +168,13 @@ public class PagedProgramTable extends JPanel {
         setLayout(new BorderLayout());
         add(scroll, BorderLayout.CENTER);
         add(ctrlPanel, BorderLayout.SOUTH);
+    }
+
+    /**
+     * @return If this is making changes to the internal ProgramTable
+     */
+    public boolean isSelfChanging() {
+        return selfChanging;
     }
 
     /**
@@ -157,8 +191,20 @@ public class PagedProgramTable extends JPanel {
         return idxs.size() - 1; //-1 because the end index is included in idxs, which doesn't count as a row
     }
 
+    /**
+     * @param page Page number
+     * @return The row number of the first row on a page
+     */
     public int getFirstRowOnPage(int page) {
         return pageSize * (page - 1);
+    }
+
+    /**
+     * Completely reloads and displays the PRG file from the start
+     */
+    public void fullReload() {
+        reloadProgram();
+        jumpToPage(1);
     }
 
     /**
@@ -166,6 +212,7 @@ public class PagedProgramTable extends JPanel {
      * Assumes that currentPage and displayedRows have been updated
      */
     public void reloadDisplay() {
+        selfChanging = true;
         // Update the JTable data
         table.deleteAllRows(); // Delete all displayed rows
         // Iterate through the row cache
@@ -183,6 +230,15 @@ public class PagedProgramTable extends JPanel {
 
         // Update row header numbers
         rowHeader.setOffset(getFirstRowOnPage(currentPage));
+
+        // Disable the selfChanging flag in the Swing handler
+        // This will run after all of the table changes have been made
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                selfChanging = false;
+            }
+        });
     }
 
     /**
@@ -226,8 +282,66 @@ public class PagedProgramTable extends JPanel {
         }
     }
 
+    /**
+     * Pulls the newest data from the currently displayed page and saves it to the PRG file
+     *
+     * This is done by:
+     * 1. Reading the PRG file into a buffer up to the beginning of the first line on the page being updated
+     * 2. Skipping all of the lines on the page
+     * 3. Appending the updated data to the buffer, filling in the skipped lines
+     * 4. Reading the rest of the file into the buffer
+     * 5. Saving this buffer as the new PRG file
+     */
     public void savePage() {
-        // TODO: savePage
+        // Grab the page data from the table
+        ArrayList<ArrayList<Object>> rowData = table.exportTableData();
+
+        // Build a string of the page data to put in the PRG file
+        String rowString = "";
+        for (int row = 0; row < rowData.size(); row++) {
+            for (int col = 0, len = rowData.get(row).size(); col < len; col++) {
+                rowString += String.valueOf(rowData.get(row).get(col)) + (col == len - 1 ? "\n" : COMMA);
+            }
+        }
+
+        // Load the file
+        RandomAccessFile f = getFile();
+        try {
+            if (f != null && f.length() > 0) {
+                // Get the starting index of the first row of the page
+                long endIdx = getRowByteIdx(getFirstRowOnPage(currentPage));
+
+                // Read everything before the row into a buffer
+                String buf = "";
+                while (f.getFilePointer() != endIdx) {
+                    buf += f.readLine() + "\n";
+                }
+
+                // Skip all of the lines on the page
+                for (int i = getFirstRowOnPage(currentPage), stop = Math.min(getNumRows(), i + pageSize); i < stop; i++) {
+                    f.readLine();
+                }
+
+                // Add the new page data to the buffer
+                buf += rowString;
+
+                // Read the rest of the file into the buffer
+                while (f.getFilePointer() != f.length()) {
+                    buf += f.readLine() + "\n";
+                }
+
+                // Seek back to the beginning and write out the buffer
+                f.seek(0);
+                f.setLength(buf.length());
+                f.write(buf.getBytes());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // Reload the program
+        reloadProgram();
+        jumpToPage(Math.min(currentPage, getNumPages()));
     }
 
     /**
@@ -360,7 +474,7 @@ public class PagedProgramTable extends JPanel {
      * @param r Requested row number
      */
     public void jumpToRow(int r) {
-        jumpToPage((int) Math.ceil((double) r / pageSize)); // TODO: Make sure this actually works. Make sure harder.
+        jumpToPage((int) Math.ceil((double) r / pageSize));
     }
 
     /**
@@ -385,6 +499,17 @@ public class PagedProgramTable extends JPanel {
     }
 
     /**
+     * Loads a JTB file to format the JTable
+     *
+     * @param path Path to the JTB file
+     */
+    public void loadTableFromFile(String path) {
+        selfChanging = true;
+        table.loadTableFromFile(path);
+        selfChanging = false;
+    }
+
+    /**
      * Gets the true row number for the visually selected row index
      *
      * @param displayed JTable index
@@ -392,13 +517,6 @@ public class PagedProgramTable extends JPanel {
      */
     public int getRowNumber(int displayed) {
         return displayed + pageSize * (currentPage - 1);
-    }
-
-    /**
-     * @return The number of the currently selected row
-     */
-    public int getSelectedRow() {
-        return getRowNumber(table.getSelectedRow());
     }
 
     /**
@@ -420,7 +538,7 @@ public class PagedProgramTable extends JPanel {
     /**
      * Loads the data of all the rows on a page into memory
      *
-     * @param page
+     * @param page Page number
      */
     private void loadPage(int page) {
         // Clear the old cache
@@ -491,5 +609,4 @@ public class PagedProgramTable extends JPanel {
         // File was not found
         return null;
     }
-
 }

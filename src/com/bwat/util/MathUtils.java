@@ -4,17 +4,6 @@ package com.bwat.util;
  * A bunch of useful math utility methods
  */
 public final class MathUtils {
-    static final String REG_NUM = "^-?\\d+(\\.\\d+)?$";
-
-    /**
-     * Checks if a string represents a valid number
-     *
-     * @param str String to check
-     * @return If the given strings matches the pattern for a number
-     */
-    public static boolean isNumber(String str) {
-        return str != null && str.trim().matches(REG_NUM);
-    }
 
     /**
      * Forces a value to be within a specified range

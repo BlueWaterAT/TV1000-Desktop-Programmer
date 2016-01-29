@@ -19,6 +19,9 @@ import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 import javax.swing.filechooser.FileFilter;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -36,6 +39,13 @@ import java.util.Scanner;
 
 import static com.bwat.programmer.Constants.*;
 
+/**
+ * Main interface for the TV1000 Programmer.
+ * Includes all functionality for manipulating row data,
+ * and sending/downloading data over SFTP
+ *
+ * @author Kareem ElFaramawi
+ */
 public class Programmer extends JPanel {
     Logger log = LoggerFactory.getLogger(getClass());
 
@@ -48,18 +58,9 @@ public class Programmer extends JPanel {
     // Holds a copy of a row's data
     private ArrayList<Object> rowCopy = new ArrayList<Object>();
 
-    private ArrayList<ArrayList<Object>> uneditedData; // TODO: Is this needed?
-
     // File IO
     private JFileChooser browser = new JFileChooser();
     private String openFilePath = null;
-
-    // FTP related variables
-    private final static int SFTP_PORT = 22;
-    private final static String SFTP_USER = "root";
-    private final static String SFTP_PASS = "bwat1234";
-    private final static String SFTP_REMOTE_DIR = "/hmi/prg/";
-    private final static String IP_LIST_FILE = "IpAddress.txt";
 
     // GUI
     private JButton insert = new JButton("Insert Row");
@@ -75,7 +76,22 @@ public class Programmer extends JPanel {
         paged = new PagedProgramTable();
         table = paged.getTable();
         initGUI();
-        uneditedData = table.exportTableData();
+
+        // Save on change listener
+        table.getModel().addTableModelListener(new TableModelListener() {
+            @Override
+            public void tableChanged(final TableModelEvent e) {
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!paged.isSelfChanging() && openFilePath != null) {
+                            table.saveTableToPath(openFilePath);
+                            paged.savePage();
+                        }
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -136,7 +152,7 @@ public class Programmer extends JPanel {
         // PASTE
         paste.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-//                pasteRow(table.getSelectedRow());
+                pasteRow(table.getSelectedRow());
             }
         });
 
@@ -166,7 +182,8 @@ public class Programmer extends JPanel {
 
                     // Prompt for how many vehicles to send to
                     JSpinner vCount = new JSpinner(new SpinnerNumberModel(1, 1, 256 - vNum, 1));
-                    if (JOptionPane.showConfirmDialog(null, new Object[]{"How many vehicles do you want to send the program to?", vCount}, "Send Program", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                    vCount.setFont(vCount.getFont().deriveFont(FONT_SIZE));
+                    if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("How many vehicles do you want to send the program to?", FONT_SIZE), vCount}, "Send Program", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
                         // Send to all vehicles
                         for (int i = 0, c = (int) vCount.getValue(); i < c; i++) {
                             sendFile(base + "." + (vNum + i));
@@ -180,7 +197,10 @@ public class Programmer extends JPanel {
         // DOWNLOAD
         download.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                downloadFile(promptIPAddress());
+                String ip = promptIPAddress();
+                if (ip != null) {
+                    downloadFile(ip);
+                }
             }
         });
 
@@ -189,11 +209,11 @@ public class Programmer extends JPanel {
         controls.add(SwingUtils.createGridJPanel(2, 1, delete, load));
         controls.add(SwingUtils.createGridJPanel(2, 1, copy, send));
         controls.add(SwingUtils.createGridJPanel(2, 1, paste, download));
-        SwingUtils.setFont_r(controls, controls.getFont().deriveFont(28.0f).deriveFont(Font.BOLD));
+        SwingUtils.setFont_r(controls, controls.getFont().deriveFont(FONT_SIZE).deriveFont(Font.BOLD));
 
         // Add everything
         setLayout(new BorderLayout());
-        setPreferredSize(new Dimension(950, 850));
+        setPreferredSize(new Dimension(1050, 850));
         add(paged, BorderLayout.CENTER);
         add(controls, BorderLayout.SOUTH);
     }
@@ -201,13 +221,14 @@ public class Programmer extends JPanel {
     /**
      * Copies the data from a row into a list
      *
-     * @param row Row index
+     * @param row Table row index
      */
     public void copyRow(int row) {
         // Range validation
         if (MathUtils.inRange_in_ex(row, 0, table.getRowCount())) {
             paste.setEnabled(true);
             rowCopy.clear();
+            // Copy the table data
             for (int col = 0; col < table.getColumnCount(); col++) {
                 rowCopy.add(table.getValueAt(row, col));
             }
@@ -216,16 +237,20 @@ public class Programmer extends JPanel {
         }
     }
 
-    // TODO: Fix saving here
-    //????????
-    //    public void pasteRow(int row) {
-//        if (row >= 0 && row < table.getRowCount() && rowCopy.size() == table.getColumnCount()) {
-//            table.editCellAt(-1, -1);
-//            for (int col = 0; col < table.getColumnCount(); col++) {
-//                table.setValueAt(rowCopy.get(col), row, col);
-//            }
-//        }
-//    }
+    /**
+     * Pastes the data saved in a list into a row
+     *
+     * @param row Table row index
+     */
+    public void pasteRow(int row) {
+        // Validation
+        if (MathUtils.inRange_in_ex(row, 0, table.getRowCount()) && rowCopy.size() == table.getColumnCount()) {
+            // Copy over all the data
+            for (int col = 0; col < table.getColumnCount(); col++) {
+                table.setValueAt(rowCopy.get(col), row, col);
+            }
+        }
+    }
 
     /**
      * Prompts the user for the SFTP IP address.
@@ -237,8 +262,7 @@ public class Programmer extends JPanel {
     private String promptIPAddress() {
         // Prompt setup
         String host = null;
-        // IP combo box
-        JComboBox<String> ipSelect = new JComboBox<String>();
+        JComboBox<String> ipSelect = new JComboBox<String>(); // IP combo box
         ipSelect.setEditable(true); // Allows manual entry
         ipSelect.setMaximumRowCount(10);
 
@@ -266,14 +290,15 @@ public class Programmer extends JPanel {
             }
 
             // Prompt the user for the IP address
-            if (JOptionPane.showConfirmDialog(null, new Object[]{"Enter vehicle IP address", ipSelect}, "Send Program", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+            SwingUtils.setFont_r(ipSelect, ipSelect.getFont().deriveFont(FONT_SIZE));
+            if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("Enter vehicle IP address", FONT_SIZE), ipSelect}, "Send Program", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
                 // Validate the IP address
                 String ip = ipSelect.getSelectedItem().toString();
                 if (NetUtils.isValidIPAddress(ip)) {
                     host = ip;
                     ips.add(host); // Add it to the list of all IPs
                 } else {
-                    JOptionPane.showMessageDialog(null, "Invalid IP Address!");
+                    JOptionPane.showMessageDialog(null, SwingUtils.createJLabel("Invalid IP Address!", FONT_SIZE));
                 }
             }
 
@@ -312,15 +337,15 @@ public class Programmer extends JPanel {
             progress.setIndeterminate(true);
 
             sending.add(SwingUtils.createGridJPanel(2, 1, new JLabel(progressMsg), progress));
+            SwingUtils.setFont_r(sending, sending.getFont().deriveFont(FONT_SIZE));
             sending.pack();
             sending.setLocationRelativeTo(null);
 
+            // Save the current page
+            paged.savePage();
+
             new Thread() {
                 public void run() {
-                    // TODO: Fix saving here
-                    // Save the table
-//                    saveTableToPath(openFilePath);
-
                     String msg = ""; // Holds the result message
                     try {
                         // Open connection
@@ -345,13 +370,13 @@ public class Programmer extends JPanel {
                     } finally {
                         // Hide loading dialog and show result message
                         sending.setVisible(false);
-                        JOptionPane.showMessageDialog(Programmer.this, msg);
+                        JOptionPane.showMessageDialog(Programmer.this, SwingUtils.createJLabel(msg, FONT_SIZE));
                     }
                 }
             }.start();
             sending.setVisible(true); // Show the loading dialog
         } else {
-            JOptionPane.showMessageDialog(null, "Invalid IP Address!");
+            JOptionPane.showMessageDialog(null, SwingUtils.createJLabel("Invalid IP Address!", FONT_SIZE));
             log.error("SFTP Error: {} is not a valid IP address", host);
         }
     }
@@ -373,7 +398,7 @@ public class Programmer extends JPanel {
                 sftp.get(remote, prg.getPath());
 
                 // Reload the program data
-                paged.reloadProgram();
+                paged.fullReload();
             }
         }, "Downloading from " + host + "...", "Program download successful!");
     }
@@ -434,28 +459,34 @@ public class Programmer extends JPanel {
             download.setEnabled(true);
             paste.setEnabled(false);
             rowCopy.clear();
-            uneditedData = null;
 
             // Load the JTB and PRG
             openFilePath = browser.getSelectedFile().getPath();
-            table.loadTableFromFile(openFilePath);
+            paged.loadTableFromFile(openFilePath);
             paged.loadProgram(getProgramPath(PROGRAM_DEFAULT));
         }
     }
 
+    /**
+     * Prompts the user to choose a location to save the JTB file
+     */
     public void saveTableAs() {
         if (browser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-//            saveTableToPath(browser.getSelectedFile().getPath());
+            // Some setup
             insert.setEnabled(true);
             delete.setEnabled(true);
             copy.setEnabled(true);
             send.setEnabled(true);
             download.setEnabled(true);
             paste.setEnabled(false);
+
+            // Extension fix
             openFilePath = browser.getSelectedFile().getPath();
             if (!openFilePath.endsWith(EXTENSION)) {
                 openFilePath += EXTENSION;
             }
+
+            // Save the JTB
             table.saveTableToPath(getTablePath());
             paged.loadProgram(getProgramPath(PROGRAM_DEFAULT));
         }

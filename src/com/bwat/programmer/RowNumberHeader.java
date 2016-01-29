@@ -3,18 +3,29 @@ package com.bwat.programmer;
 import javax.swing.JTable;
 import javax.swing.table.TableColumn;
 
+/**
+ * A header to display row numbers on the side of a JTable
+ *
+ * @author Kareem ElFaramawi
+ */
 public class RowNumberHeader extends JTable {
+    // Parent table this is displayed on
     private JTable parent;
-    private int offset = 0; // An offset for the row #
+
+    // An offset for the row #
+    private int offset = 0;
 
     public RowNumberHeader(JTable table) {
         super();
         parent = table;
+
+        // Some header settings
         setAutoCreateColumnsFromModel(false);
         setModel(parent.getModel());
         setSelectionModel(parent.getSelectionModel());
         setAutoscrolls(false);
 
+        // Creating the header column
         TableColumn col = new TableColumn();
         addColumn(col);
         col.setCellRenderer(parent.getTableHeader().getDefaultRenderer());
@@ -38,6 +49,11 @@ public class RowNumberHeader extends JTable {
         return parent.getRowHeight();
     }
 
+    /**
+     * Set the offset for the first row number
+     *
+     * @param offset Row offset
+     */
     public void setOffset(int offset) {
         this.offset = offset;
     }
