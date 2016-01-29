@@ -230,8 +230,51 @@ public class PagedProgramTable extends JPanel {
         // TODO: savePage
     }
 
+    /**
+     * Deletes the visually selected row index from the PRG file
+     *
+     * This is done by:
+     * 1. Reading the PRG file into a buffer up to the beginning of the deleted line
+     * 2. Skipping the deleted line
+     * 3. Reading the rest of the PRG into the buffer
+     * 4. Saving this buffer as the new PRG file
+     *
+     * @param tableIndex JTable row index
+     */
     public void deleteRow(int tableIndex) {
-        // TODO: deleteRow
+        // Load the file
+        RandomAccessFile f = getFile();
+        try {
+            if (f != null && f.length() > 0) {
+                // Get the  starting index of the row to be deleted
+                long endIdx = getRowByteIdx(getRowNumber(tableIndex));
+
+                // Read everything before the row into a buffer
+                String buf = "";
+                while (f.getFilePointer() != endIdx) {
+                    buf += f.readLine() + "\n";
+                }
+
+                // Skip the row to be deleted
+                f.readLine();
+
+                // Read the rest of the file into the buffer
+                while (f.getFilePointer() != f.length()) {
+                    buf += f.readLine() + "\n";
+                }
+
+                // Seek back to the beginning and write out the buffer
+                f.seek(0);
+                f.setLength(buf.length());
+                f.write(buf.getBytes());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // Reload the program
+        reloadProgram();
+        jumpToPage(Math.min(currentPage, getNumPages()));
     }
 
     /**

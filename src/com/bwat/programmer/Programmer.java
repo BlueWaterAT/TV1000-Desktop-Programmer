@@ -122,10 +122,7 @@ public class Programmer extends JPanel {
         // DELETE
         delete.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                // TODO: Row deletion
-                log.error("NOT IMPLEMENTED YET: CAREFUL WHICH ROW IS DELETED");
-                System.out.println(paged.getSelectedRow());
-//                table.deleteRow(table.getSelectedRow());
+                paged.deleteRow(table.getSelectedRow());
             }
         });
 
