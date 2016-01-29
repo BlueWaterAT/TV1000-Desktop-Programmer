@@ -226,6 +226,53 @@ public class PagedProgramTable extends JPanel {
         }
     }
 
+    public void savePage() {
+        // TODO: savePage
+    }
+
+    public void deleteRow(int tableIndex) {
+        // TODO: deleteRow
+    }
+
+    /**
+     * Inserts a blank new row at the very end of the program and saves the PRG file
+     */
+    public void insertRow() {
+        // Load the file
+        RandomAccessFile f = getFile();
+        if (f != null) {
+            try {
+                // Create a blank row string ("null,null,null,null,....")
+                String newRow = new String(new char[table.getColumnCount() - 1]).replace("\0", "null,") + "null\n";
+
+                // Check to make sure the file ending is correct
+                if (f.length() > 0) {
+                    // Seek to the last character in the file
+                    f.seek(idxs.get(idxs.size() - 1) - 1);
+
+                    // Make sure there's a newline before the new row
+                    if (f.read() != (byte) '\n') {
+                        newRow = "\n" + newRow;
+                    }
+                }
+
+                // Write the new row to the end of the file
+                f.setLength(f.length() + newRow.length());
+                f.write(newRow.getBytes());
+                f.close();
+
+                log.info("New row inserted at the end of \"{}\"", programPath);
+            } catch (IOException e) {
+                log.info("Error inserting new row in \"{}\"", programPath);
+                e.printStackTrace();
+            }
+
+            // Reload the program
+            reloadProgram();
+            jumpToPage(currentPage);
+        }
+    }
+
     /**
      * Sets the number of elements to display on every page and updates the display
      *
@@ -288,14 +335,36 @@ public class PagedProgramTable extends JPanel {
     }
 
     /**
+     * @return The internally used ProgramTable
+     */
+    public ProgramTable getTable() {
+        return table;
+    }
+
+    /**
+     * Gets the true row number for the visually selected row index
+     *
+     * @param displayed JTable index
+     * @return Real row number in the whole program
+     */
+    public int getRowNumber(int displayed) {
+        return displayed + pageSize * (currentPage - 1);
+    }
+
+    /**
+     * @return The number of the currently selected row
+     */
+    public int getSelectedRow() {
+        return getRowNumber(table.getSelectedRow());
+    }
+
+    /**
      * Gets the byte index in the program file that a row starts at
      *
      * @param r Requested row number
      * @return Starting index of the row data
      */
     private Long getRowByteIdx(int r) {
-//        --r; // Displayed rows start at 1
-
         // Row index validation
         if (!MathUtils.inRange_in_ex(r, 0, getNumRows())) {
             throw new IllegalArgumentException("The requested row (" + r + ") does not exist in the program");
@@ -380,27 +449,4 @@ public class PagedProgramTable extends JPanel {
         return null;
     }
 
-    /**
-     * @return The internally used ProgramTable
-     */
-    public ProgramTable getTable() {
-        return table;
-    }
-
-    /**
-     * Gets the true row number for the visually selected row index
-     *
-     * @param displayed JTable index
-     * @return Real row number in the whole program
-     */
-    public int getRowNumber(int displayed) {
-        return displayed + pageSize * (currentPage - 1);
-    }
-
-    /**
-     * @return The number of the currently selected row
-     */
-    public int getSelectedRow() {
-        return getRowNumber(table.getSelectedRow());
-    }
 }

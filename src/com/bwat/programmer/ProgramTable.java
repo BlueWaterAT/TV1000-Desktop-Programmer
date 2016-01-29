@@ -35,6 +35,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
@@ -464,5 +466,64 @@ public class ProgramTable extends JTable {
         // Keep reading until a line is found
         while ((line = scan.nextLine()).startsWith(COMMENT) || line.length() == 0) ;
         return line;
+    }
+
+    public void saveTableToPath(String path) {
+        if (!path.endsWith(EXTENSION)) {
+            path += EXTENSION;
+        }
+        try {
+            // Save table settings
+            PrintWriter pw = new PrintWriter(new FileOutputStream(new File(path)));
+            pw.println(COMMENT + "Interactive JTable Save Data");
+            pw.println("\n" + COMMENT + "Column Headers and Tooltips, the number of headers sets the number of columns:");
+            for (int i = 0; i < getColumnCount(); i++) {
+                pw.print(getColumnModel().getColumn(i).getHeaderValue() + (i == getColumnCount() - 1 ? "\n" : COMMA));
+            }
+            for (int i = 0; i < getColumnCount(); i++) {
+                pw.print(tooltips.get(i) + (i == getColumnCount() - 1 ? "\n" : COMMA));
+            }
+            pw.println("\n" + COMMENT + "The following lines are all the data types of the columns");
+            pw.println(COMMENT + "There are 4 types: Text, Checkbox, Combo Box, and Number. Their syntax is as follows:");
+            pw.printf("%s\"%s\"\n", COMMENT, CellType.TEXT.getTypeName());
+            pw.printf("%s\"%s\"\n", COMMENT, CellType.CHECK.getTypeName());
+            pw.printf("%s\"%s,choice,choice,choice,...\"\n", COMMENT, CellType.COMBO.getTypeName());
+            pw.printf("%s\"%s\"\n", COMMENT, CellType.NUMBER.getTypeName());
+            pw.println(COMMENT + "The number of lines MUST equal the number of columns");
+            for (int i = 0; i < getColumnCount(); i++) {
+                switch (columnTypes.get(i)) {
+                    case TEXT:
+                        pw.println("text");
+                        break;
+                    case CHECK:
+                        pw.println("check");
+                        break;
+                    case COMBO:
+                        pw.print("combo,");
+                        JComboBox<String> combo = (JComboBox<String>) getColumnModel().getColumn(i).getCellEditor().getTableCellEditorComponent(null, null, false, -1, i);
+                        for (int j = 0; j < combo.getItemCount(); j++) {
+                            pw.print(combo.getItemAt(j) + (j == combo.getItemCount() - 1 ? "\n" : COMMA));
+                        }
+                        break;
+                    case NUMBER:
+                        pw.println(CellType.NUMBER.getTypeName());
+                        break;
+                }
+            }
+            pw.flush();
+            pw.close();
+            log.info("JTB file \"{}\" successfully saved", path);
+
+            // Create a blank PRG file
+            int index = PROGRAM_DEFAULT;
+            if (index > 0) {
+                path = path.substring(0, path.lastIndexOf(EXTENSION)) + "-" + index + PROGRAM_EXTENSION;
+                pw = new PrintWriter(new FileOutputStream(new File(path)));
+                pw.close();
+                log.info("Blank PRG file successfully saved to \"{}\"", path);
+            }
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
     }
 }

@@ -97,7 +97,12 @@ public class Programmer extends JPanel {
         // Programmer Controls
 
         // Initial button states
-        paste.setEnabled(false);
+        paste.setEnabled(false); // Can be enabled once a row is copied
+
+        // Need a table loaded to be enabled
+        insert.setEnabled(false);
+        delete.setEnabled(false);
+        copy.setEnabled(false);
         send.setEnabled(false);
         download.setEnabled(false);
 
@@ -110,7 +115,7 @@ public class Programmer extends JPanel {
         // INSERT
         insert.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                table.insertRow();
+                paged.insertRow();
             }
         });
 
@@ -141,7 +146,7 @@ public class Programmer extends JPanel {
         // SAVE AS
         saveAs.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-//                saveTableAs();
+                saveTableAs();
             }
         });
 
@@ -191,10 +196,9 @@ public class Programmer extends JPanel {
 
         // Add everything
         setLayout(new BorderLayout());
-        setPreferredSize(new Dimension(950, 800));
+        setPreferredSize(new Dimension(950, 850));
         add(paged, BorderLayout.CENTER);
         add(controls, BorderLayout.SOUTH);
-
     }
 
     /**
@@ -426,6 +430,9 @@ public class Programmer extends JPanel {
         // Show file browser
         if (browser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             // Some initial setup
+            insert.setEnabled(true);
+            delete.setEnabled(true);
+            copy.setEnabled(true);
             send.setEnabled(true);
             download.setEnabled(true);
             paste.setEnabled(false);
@@ -435,6 +442,24 @@ public class Programmer extends JPanel {
             // Load the JTB and PRG
             openFilePath = browser.getSelectedFile().getPath();
             table.loadTableFromFile(openFilePath);
+            paged.loadProgram(getProgramPath(PROGRAM_DEFAULT));
+        }
+    }
+
+    public void saveTableAs() {
+        if (browser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+//            saveTableToPath(browser.getSelectedFile().getPath());
+            insert.setEnabled(true);
+            delete.setEnabled(true);
+            copy.setEnabled(true);
+            send.setEnabled(true);
+            download.setEnabled(true);
+            paste.setEnabled(false);
+            openFilePath = browser.getSelectedFile().getPath();
+            if (!openFilePath.endsWith(EXTENSION)) {
+                openFilePath += EXTENSION;
+            }
+            table.saveTableToPath(getTablePath());
             paged.loadProgram(getProgramPath(PROGRAM_DEFAULT));
         }
     }
