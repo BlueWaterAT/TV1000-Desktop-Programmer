@@ -18,6 +18,8 @@ public class Constants {
     public final static String SFTP_USER = "root";
     public final static String SFTP_PASS = "bwat1234";
     public final static String SFTP_REMOTE_DIR = "/hmi/prg/";
+    public final static String SFTP_ALERT_FILE = "SFTPUPDATE";
+    public final static String SFTP_ALERT_MSG = "UPDATE\n";
     public final static String IP_LIST_FILE = "IpAddress.txt";
 
     //GUI

@@ -4,6 +4,8 @@ import com.bwat.util.MathUtils;
 import com.bwat.util.NetUtils;
 import com.bwat.util.SwingUtils;
 import net.schmizz.sshj.SSHClient;
+import net.schmizz.sshj.sftp.OpenMode;
+import net.schmizz.sshj.sftp.RemoteFile;
 import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import org.slf4j.Logger;
@@ -34,6 +36,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Scanner;
 
@@ -417,6 +420,14 @@ public class Programmer extends JPanel {
                 // Send the PRG file
                 String remote = SFTP_REMOTE_DIR + prg.getName();
                 sftp.put(prg.getPath(), remote);
+
+                // Touch the notification file to alert the HMI
+                RemoteFile upd = sftp.open(SFTP_REMOTE_DIR + SFTP_ALERT_FILE, new HashSet<OpenMode>(Arrays.asList(new OpenMode[]{OpenMode.WRITE})));
+                upd.setLength(SFTP_ALERT_MSG.length());
+                upd.write(0, SFTP_ALERT_MSG.getBytes(), 0, SFTP_ALERT_MSG.length());
+                upd.close();
+
+                //                sftp.truncate(SFTP_REMOTE_DIR + SFTP_ALERT_FILE, 0);
             }
         }, "Sending to " + host + "...", "Program upload successful!");
     }

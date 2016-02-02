@@ -145,10 +145,9 @@ public class PagedProgramTable extends JPanel {
                 sizeSelect.setFont(sizeSelect.getFont().deriveFont(FONT_SIZE));
 
                 // Prompt the user for the new pageSize
-                if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("Enter row number", FONT_SIZE), sizeSelect}, "Jump to Row", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                if (JOptionPane.showConfirmDialog(null, new Object[]{SwingUtils.createJLabel("Enter new page size", FONT_SIZE), sizeSelect}, "Jump to Row", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
                     //Set the pageSize and reload the first page
-                    pageSize = (int) sizeSelect.getValue();
-                    jumpToPage(1);
+                    setPageSize((int) sizeSelect.getValue());
                 }
             }
         });
@@ -258,6 +257,7 @@ public class PagedProgramTable extends JPanel {
                 }
                 // Save the index for the end of the file
                 idxs.add(f.getFilePointer());
+                f.close();
             }
         } catch (IOException e) {
             log.error("Error while reading PRG file \"{}\"", programPath);
@@ -333,6 +333,8 @@ public class PagedProgramTable extends JPanel {
                 f.seek(0);
                 f.setLength(buf.length());
                 f.write(buf.getBytes());
+                f.close();
+                log.info("PRG file \"{}\" successfully saved", programPath);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -380,6 +382,8 @@ public class PagedProgramTable extends JPanel {
                 f.seek(0);
                 f.setLength(buf.length());
                 f.write(buf.getBytes());
+                f.close();
+                log.info("Row deleted from \"{}\"", programPath);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -416,7 +420,6 @@ public class PagedProgramTable extends JPanel {
                 f.setLength(f.length() + newRow.length());
                 f.write(newRow.getBytes());
                 f.close();
-
                 log.info("New row inserted at the end of \"{}\"", programPath);
             } catch (IOException e) {
                 log.info("Error inserting new row in \"{}\"", programPath);
@@ -578,6 +581,7 @@ public class PagedProgramTable extends JPanel {
                     }
                     displayedRows.add(rowData); // Add the row to the cache
                 }
+                f.close();
             } catch (IOException e) {
                 log.error("Error while reading PRG file \"{}\"", programPath);
                 e.printStackTrace();
