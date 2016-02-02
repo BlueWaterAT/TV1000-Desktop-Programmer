@@ -75,6 +75,10 @@ public class Programmer extends JPanel {
     private JButton send = new JButton("Send");
     private JButton download = new JButton("Download");
 
+    //Timing to prevent excessive autosaving
+    long lastSaveTime = 0;
+    final long SAVE_RELOAD_TIME = 500;
+
     public Programmer() {
         paged = new PagedProgramTable();
         table = paged.getTable();
@@ -87,7 +91,8 @@ public class Programmer extends JPanel {
                 SwingUtilities.invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                        if (!paged.isSelfChanging() && openFilePath != null) {
+                        if (!paged.isSelfChanging() && openFilePath != null && (System.currentTimeMillis() - lastSaveTime) > SAVE_RELOAD_TIME) {
+                            lastSaveTime = System.currentTimeMillis();
                             table.saveTableToPath(openFilePath);
                             paged.savePage();
                         }
