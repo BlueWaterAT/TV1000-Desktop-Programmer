@@ -416,6 +416,7 @@ public class ProgramTable extends JTable {
                     setColumnType(i, CellType.NUMBER);
                 }
             }
+            scan.close();
             log.info("JTB file \"{}\" successfully loaded", path);
         } catch (FileNotFoundException e) {
             log.info("JTB file \"{}\" not found", path);
@@ -500,8 +501,7 @@ public class ProgramTable extends JTable {
             if (index > 0) {
                 path = path.substring(0, path.lastIndexOf(EXTENSION)) + "-" + index + PROGRAM_EXTENSION;
                 if (!(new File(path).exists())) {
-                    pw = new PrintWriter(new FileOutputStream(new File(path)));
-                    pw.close();
+                    new PrintWriter(new FileOutputStream(new File(path))).close();
                     log.info("Blank PRG file successfully saved to \"{}\"", path);
                 }
             }
